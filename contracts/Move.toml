@@ -1,0 +1,19 @@
+[package]
+name = "vault-factory"
+version = "1.0.0"
+authors = []
+
+
+
+[addresses]
+vault_factory = "0xf02e42e167e86430855e112267405f0bb4bb6a8fed16cd7e4e4a339ec7341f73"
+
+
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "mainnet"
+subdir = "aptos-framework"
+
+[dev-dependencies]
