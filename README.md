@@ -1,46 +1,102 @@
 # aptos-vault-hackathon
+
 Copy trading vaults on Aptos—Move smart contracts, React dashboard, social trading!
-Update Leader Function: Multi-Signer Limitation
-VaultFactory's update_leader entry function requires two signers (the old leader and the new leader) for vault ownership transfer.
 
-However:
-Current Aptos wallets and Web3 wallet adapters (Petra, Martian, wallets using wallet-connect, etc.) only support submitting transactions from a single wallet/account at a time. It is not yet possible to perform a transaction from two separate wallets in the browser interface.
+## ✅ Fixed Merkle Integration Issues
 
-How to demo or test for judges:
-The update_leader function is fully implemented in the Move smart contract.
+### What Was Fixed:
+1. **Complete Merkle SDK Integration**: Added proper import and initialization of `@merkletrade/ts-sdk`
+2. **Production/Demo Toggle**: Added safe production mode with environment variable validation
+3. **Real API Integration**: Implemented actual Merkle SDK calls for production mode
+4. **Environment Configuration**: Added `.env.example` with proper API key setup
+5. **Error Handling**: Enhanced error messages for missing API keys and SDK failures
+6. **Live Trading Safety**: Added clear visual indicators and warnings for production mode
 
-This function cannot be triggered from a standard wallet-based Web3 dApp, due to lack of multi-signer UX support.
+### New Features:
+- ✅ **Production Mode Toggle**: Switch between demo and live trading
+- ✅ **Real Merkle SDK Calls**: Actual `createOrder()` and `submitOrder()` integration
+- ✅ **Environment Variables**: Proper API key configuration
+- ✅ **Enhanced UI**: Clear mode indicators and status messages
+- ✅ **Safety Checks**: Prevents accidental live trading without API keys
 
-You may test this feature via the Aptos CLI, Move scripts, or a local emulator that supports signing with multiple accounts.
+## Setup Instructions
 
-For hackathon judging, all other vault features (create, join, leave, deposit, withdraw, publish, pause, resume) work via the frontend and can be fully demoed!
+### 1. Install Dependencies
+```bash
+cd frontend
+npm install
+```
 
-Note:
-Multi-signer UX will be possible as soon as wallet adapters and Aptos wallets support this feature. Our contract is future-ready for it.
+### 2. Configure Merkle API
+```bash
+# Copy the example environment file
+cp .env.example .env
 
-Example CLI/Move script (conceptual, not yet natively supported):
+# Edit .env and add your Merkle Trade API key
+REACT_APP_MERKLE_API_KEY=your_actual_api_key_here
+```
 
-text
-// This is just pseudo-code for the future CLI support
-aptos move run --function update_leader --signers old_leader,new_leader
+### 3. Get Merkle API Key
+1. Visit [Merkle Trade Developer Portal](https://docs.merkletrade.com)
+2. Create an account and generate API key
+3. Add the key to your `.env` file
 
- Merkle Trade integration (demo mode):
+### 4. Run the Application
+```bash
+npm start
+```
 
-Full integration ready:
-Our dApp connects with the Merkle Trade SDK, enabling real on-chain order creation for decentralized trading.
+## Trading Modes
 
-Hackathon safety:
-For this demo, trades built with Merkle SDK are shown as payloads in the UI, not submitted live—this ensures transparency for judging and protects test accounts.
+### Demo Mode (Default)
+- ✅ Safe for testing and development
+- ✅ Generates mock trade payloads
+- ✅ No real money involved
+- ✅ Shows exact data that would be sent to Merkle
 
-Backend logic proven:
-Every time you execute a trade, the dApp shows exactly what would be sent to Merkle’s DEX—validating trade construction, parameters, and API workflow.
+### Production Mode
+- ⚠️ **LIVE TRADING ENABLED**
+- ⚠️ Requires valid Merkle API key
+- ⚠️ Uses real money - be careful!
+- ✅ Full integration with Merkle DEX
+- ✅ Real order creation and submission
 
-Production ready:
-If extended, these payloads can be signed and submitted on-chain as soon as the full wallet workflow is added (already compatible with Aptos and Merkle SDK standards).
+## Multi-Signer Limitation (Unchanged)
 
-User experience:
-Judges and users can review transaction details and payloads, confirming that both on-chain signals and real trades are supported.
+**Update Leader Function**: VaultFactory's update_leader entry function requires two signers (the old leader and the new leader) for vault ownership transfer.
 
-You can add a short note below the bullets:
+**Current Limitation**: Aptos wallets and Web3 wallet adapters (Petra, Martian, etc.) only support single-wallet transactions in browser interfaces.
 
-This approach balances security and demo reliability, and demonstrates readiness for full integration with Aptos DEXs.
+**For Demo/Testing**: All other vault features (create, join, leave, deposit, withdraw, publish, pause, resume) work via the frontend and can be fully demoed!
+
+**Future Solution**: Multi-signer UX will be possible when wallet adapters support this feature. Our contract is ready for it.
+
+## Security Features
+
+- 🔒 **API Key Protection**: Environment variables prevent key exposure
+- 🔒 **Mode Validation**: Cannot enable production without proper configuration
+- 🔒 **Clear Warnings**: Visual indicators for live trading mode
+- 🔒 **Demo Default**: Starts in safe demo mode by default
+
+## About
+
+This dApp demonstrates copy trading vaults on Aptos with full Merkle Trade integration. The implementation is production-ready and includes comprehensive safety features for development and testing.
+
+### Architecture
+- **Frontend**: React with Aptos wallet integration
+- **Smart Contracts**: Move language on Aptos blockchain
+- **Trading**: Merkle Trade SDK for DEX integration
+- **Safety**: Dual-mode operation (demo/production)
+
+## Resources
+
+- [Aptos Documentation](https://aptos.dev)
+- [Merkle Trade Documentation](https://docs.merkletrade.com)
+- [Move Language Guide](https://move-language.github.io/move/)
+
+## Languages
+
+- JavaScript 76.1%
+- Move 20.0%
+- HTML 2.5%
+- CSS 1.4%
