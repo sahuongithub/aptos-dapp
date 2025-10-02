@@ -301,6 +301,21 @@ function App() {
           </p>
         </header>
 
+        {/* Demo Mode Indicator */}
+        <div style={{ 
+          backgroundColor: "#d4edda", 
+          border: "1px solid #c3e6cb",
+          padding: "15px", 
+          marginBottom: "20px", 
+          borderRadius: "8px",
+          textAlign: "center"
+        }}>
+          <strong style={{ color: "#155724" }}>🔒 DEMO MODE - Safe Testing Environment</strong>
+          <p style={{ margin: "5px 0 0 0", fontSize: "14px", color: "#155724" }}>
+            All transactions are simulated. No real funds required for testing.
+          </p>
+        </div>
+
         {error && (
           <div style={{ 
             color: "red", 
@@ -405,3 +420,4 @@ function App() {
 }
 
 export default App;
+ENDOFFILE
