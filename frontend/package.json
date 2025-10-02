@@ -23,7 +23,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "install-wallets": "npm install @martianwallet/aptos-wallet-adapter fewcha-plugin-wallet-adapter @pontem/wallet-adapter-plugin --save"
   },
   "eslintConfig": {
     "extends": [

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { AptosWalletAdapterProvider, useWallet } from "@aptos-labs/wallet-adapter-react";
 import { PetraWallet } from "petra-plugin-wallet-adapter";
+import { MartianWallet } from "@martianwallet/aptos-wallet-adapter";
+import { FewchaWallet } from "fewcha-plugin-wallet-adapter";
+import { PontemWallet } from "@pontem/wallet-adapter-plugin";
 import CreateVaultButton from "./CreateVaultButton";
 import DepositButton from "./DepositButton";
 import WithdrawButton from "./WithdrawButton";
@@ -14,31 +17,59 @@ import EmergencyPauseButton from "./EmergencyPauseButton";
 import MarketStats from "./MarketStats";
 
 function WalletConnectSection() {
-  const { connected, account, connect, disconnect, connecting } = useWallet();
+  const { connected, account, connect, disconnect, connecting, wallet } = useWallet();
   const [error, setError] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
+  const [walletName, setWalletName] = useState("");
 
   useEffect(() => {
-    if (connected) {
+    if (connected && account) {
       setConnectionStatus("connected");
+      setWalletName(wallet?.adapter?.name || "Unknown Wallet");
       setError("");
     } else if (connecting) {
       setConnectionStatus("connecting");
     } else {
       setConnectionStatus("disconnected");
+      setWalletName("");
     }
-  }, [connected, connecting]);
+  }, [connected, connecting, account, wallet]);
 
   const handleConnect = async () => {
     try {
       setError("");
       setConnectionStatus("connecting");
       
-      // Use the wallet adapter's connect method instead of direct window.petra
-      await connect();
+      // Add timeout to prevent infinite connecting state
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timeout - please try again')), 30000)
+      );
+      
+      await Promise.race([connect(), timeoutPromise]);
+      
+      // Verify connection after connect attempt
+      setTimeout(() => {
+        if (!connected && !connecting) {
+          setError("Connection failed. Please ensure your wallet is installed and unlocked.");
+          setConnectionStatus("disconnected");
+        }
+      }, 3000);
+      
     } catch (err) {
       console.error("Wallet connection error:", err);
-      setError(err.message || "Failed to connect wallet. Please ensure Petra is installed and unlocked.");
+      let errorMessage = "Failed to connect wallet. ";
+      
+      if (err.message?.includes('timeout')) {
+        errorMessage += "Connection timed out. Please try again.";
+      } else if (err.message?.includes('User rejected')) {
+        errorMessage += "Connection was rejected. Please approve the connection in your wallet.";
+      } else if (err.message?.includes('No wallet')) {
+        errorMessage += "No wallet found. Please install Petra, Martian, or another supported Aptos wallet.";
+      } else {
+        errorMessage += err.message || "Please ensure your wallet is installed and unlocked.";
+      }
+      
+      setError(errorMessage);
       setConnectionStatus("disconnected");
     }
   };
@@ -48,6 +79,7 @@ function WalletConnectSection() {
       setError("");
       await disconnect();
       setConnectionStatus("disconnected");
+      setWalletName("");
     } catch (err) {
       console.error("Wallet disconnection error:", err);
       setError("Failed to disconnect wallet");
@@ -100,24 +132,52 @@ function WalletConnectSection() {
         }}>
           {connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}
         </span>
+        {walletName && (
+          <span style={{ marginLeft: "10px", fontSize: "14px", color: "#666" }}>
+            ({walletName})
+          </span>
+        )}
       </div>
 
       {!connected ? (
-        <button
-          style={{ 
-            padding: "12px 24px",
-            backgroundColor: connecting ? "#ccc" : "#007aff",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            cursor: connecting ? "not-allowed" : "pointer",
-            fontSize: "16px"
-          }}
-          onClick={handleConnect}
-          disabled={connecting}
-        >
-          {connecting ? "Connecting..." : "Connect Wallet"}
-        </button>
+        <>
+          <button
+            style={{ 
+              padding: "12px 24px",
+              backgroundColor: connecting ? "#ccc" : "#007aff",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: connecting ? "not-allowed" : "pointer",
+              fontSize: "16px",
+              marginRight: "10px"
+            }}
+            onClick={handleConnect}
+            disabled={connecting}
+          >
+            {connecting ? "Connecting..." : "Connect Wallet"}
+          </button>
+          
+          {connecting && (
+            <button
+              style={{
+                padding: "12px 24px",
+                backgroundColor: "#dc3545",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "16px"
+              }}
+              onClick={() => {
+                setConnectionStatus("disconnected");
+                setError("");
+              }}
+            >
+              Cancel
+            </button>
+          )}
+        </>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
           <div>
@@ -147,25 +207,85 @@ function WalletConnectSection() {
         </div>
       )}
 
-      {!connected && (
-        <p style={{ marginTop: "10px", fontSize: "14px", color: "#666" }}>
-          Please install and unlock the Petra wallet to continue.
-        </p>
+      {!connected && !connecting && (
+        <div style={{ marginTop: "10px", fontSize: "14px", color: "#666" }}>
+          <p>Supported wallets: Petra, Martian, Fewcha, Pontem</p>
+          <p>
+            Don't have a wallet?{" "}
+            <a 
+              href="https://petra.app/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: "#007aff" }}
+            >
+              Install Petra
+            </a>
+            {" or "}
+            <a 
+              href="https://martianwallet.xyz/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: "#007aff" }}
+            >
+              Install Martian
+            </a>
+          </p>
+        </div>
       )}
     </div>
   );
 }
 
 function App() {
-  const wallets = [new PetraWallet()];
+  // Initialize multiple wallet adapters for better compatibility
+  const wallets = [
+    new PetraWallet(),
+    // Uncomment these when you install the respective packages
+    // new MartianWallet(),
+    // new FewchaWallet(),
+    // new PontemWallet(),
+  ];
+  
   const [error, setError] = useState("");
+  const [systemReady, setSystemReady] = useState(false);
 
   useEffect(() => {
-    // Check if Petra wallet is available
-    if (typeof window !== "undefined" && !window.aptos && !window.petra) {
-      setError("Petra wallet not detected. Please install Petra from the Chrome Web Store.");
-    }
+    // Enhanced wallet detection
+    const checkWalletAvailability = () => {
+      const hasWallet = (
+        (typeof window !== "undefined") && 
+        (window.aptos || window.petra || window.martian || window.fewcha || window.pontem)
+      );
+      
+      if (!hasWallet) {
+        setError("No Aptos wallet detected. Please install Petra, Martian, or another supported wallet.");
+      } else {
+        setError("");
+      }
+      
+      setSystemReady(true);
+    };
+    
+    // Check immediately and after a short delay (for wallet injection)
+    checkWalletAvailability();
+    const timeoutId = setTimeout(checkWalletAvailability, 1000);
+    
+    return () => clearTimeout(timeoutId);
   }, []);
+
+  if (!systemReady) {
+    return (
+      <div style={{ 
+        display: "flex", 
+        justifyContent: "center", 
+        alignItems: "center", 
+        height: "100vh",
+        fontSize: "18px"
+      }}>
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <AptosWalletAdapterProvider 
@@ -173,7 +293,7 @@ function App() {
       autoConnect={false}
       onError={(error) => {
         console.error("Wallet Adapter Error:", error);
-        setError(error.message || "Wallet adapter error occurred");
+        setError(error?.message || "Wallet adapter error occurred");
       }}
     >
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
@@ -194,6 +314,26 @@ function App() {
             border: "1px solid #ffcdd2"
           }}>
             <strong>System Error:</strong> {error}
+            {error.includes("No Aptos wallet") && (
+              <div style={{ marginTop: "10px" }}>
+                <a 
+                  href="https://petra.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: "#007aff", textDecoration: "underline", marginRight: "15px" }}
+                >
+                  Install Petra Wallet
+                </a>
+                <a 
+                  href="https://martianwallet.xyz/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: "#007aff", textDecoration: "underline" }}
+                >
+                  Install Martian Wallet
+                </a>
+              </div>
+            )}
           </div>
         )}
 
