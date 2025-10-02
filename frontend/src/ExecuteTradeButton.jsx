@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { MerkleTradeSDK } from "@merkletrade/ts-sdk";
+import { MerkleClient, MerkleClientConfig } from "@merkletrade/ts-sdk";
 import { parseTransactionError, getFunctionName, validateAmount, LOADING_STATES } from "./utils/errorHandler";
 
 const ExecuteTradeButton = () => {
@@ -19,14 +19,15 @@ const ExecuteTradeButton = () => {
   const aptos = new Aptos(config);
 
   // Initialize Merkle SDK (for production use)
-  const merkleSDK = new MerkleTradeSDK({
-    network: "testnet", // Change to "mainnet" for production
-    apiKey: process.env.REACT_APP_MERKLE_API_KEY || "", // Add your API key to .env
-  });
+
+// For mainnet, use: await MerkleClientConfig.mainnet()
+
 
   const generateMerkleTradePayload = async (amount, type) => {
     if (isProduction && process.env.REACT_APP_MERKLE_API_KEY) {
       try {
+          const merkleConfig = await MerkleClientConfig.testnet();
+           const merkleSDK = new MerkleClient(merkleConfig);
         // Production: Use actual Merkle SDK
         const orderData = {
           market: "APT-USDC",
@@ -65,6 +66,8 @@ const ExecuteTradeButton = () => {
   const submitToMerkleDEX = async (payload) => {
     if (isProduction && process.env.REACT_APP_MERKLE_API_KEY) {
       try {
+         const merkleConfig = await MerkleClientConfig.testnet();
+         const merkleSDK = new MerkleClient(merkleConfig);
         // Production: Submit to actual Merkle DEX
         const result = await merkleSDK.submitOrder(payload);
         return result;
