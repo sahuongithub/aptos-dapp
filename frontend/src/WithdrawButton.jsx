@@ -1,69 +1,257 @@
 import React, { useState } from "react";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
 
-const VAULT_ADDRESS = "0xf02e42e167e86430855e112267405f0bb4bb6a8fed16cd7e4e4a339ec7341f73";
-const VAULT_MODULE = "VaultFactory";
-const VAULT_FUNCTION = "withdraw";
-
-function WithdrawButton() {
-  const [leader, setLeader] = useState("");
-  const [amount, setAmount] = useState("");
+const WithdrawButton = () => {
+  const { account, signAndSubmitTransaction, connected } = useWallet();
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(null);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [leaderAddress, setLeaderAddress] = useState("");
+  const [amount, setAmount] = useState("");
 
-  async function handleWithdraw() {
-    setLoading(true);
-    setSuccess(null);
-    setError(null);
+  const config = new AptosConfig({ network: Network.TESTNET });
+  const aptos = new Aptos(config);
 
-    if (!window.petra) {
-      setError("Petra wallet extension not detected.");
-      setLoading(false);
+  const handleWithdraw = async () => {
+    if (!connected || !account) {
+      setError("Please connect your wallet first");
       return;
     }
 
-    const txPayload = {
-      type: "entry_function_payload",
-      function: `${VAULT_ADDRESS}::${VAULT_MODULE}::${VAULT_FUNCTION}`,
-      arguments: [leader, amount],
-      type_arguments: [],
-    };
+    if (!leaderAddress) {
+      setError("Please enter vault leader address");
+      return;
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      setError("Please enter a valid amount");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
 
     try {
-      const txResponse = await window.petra.signAndSubmitTransaction(txPayload);
-      setSuccess(`Transaction hash: ${txResponse.hash}`);
+      // Normalize the address (ensure 0x prefix)
+      const normalizedAddress = leaderAddress.startsWith('0x') ? 
+        leaderAddress : 
+        `0x${leaderAddress}`;
+
+      // Convert amount to proper format (multiply by 10^8 for APT decimals)
+      const amountInOctas = Math.floor(parseFloat(amount) * 100000000);
+
+      console.log("Withdrawing from vault:", {
+        leader: normalizedAddress,
+        amount: amountInOctas,
+        originalAmount: amount
+      });
+
+      const transaction = {
+        data: {
+          function: "0xf02e42e167e86430855e112267405f0bb4bb6a8fed16cd7e4e4a339ec7341f73::VaultFactory::withdraw",
+          functionArguments: [normalizedAddress, amountInOctas.toString()],
+        },
+        options: {
+          maxGasAmount: 20000,      // Sufficient gas for withdraw transactions
+          gasUnitPrice: 100,        // Standard gas price for testnet
+          expireTimestamp: Math.floor(Date.now() / 1000) + 30, // 30 seconds timeout
+        },
+      };
+
+      console.log("Transaction configuration:", transaction);
+
+      const response = await signAndSubmitTransaction(transaction);
+      
+      if (response) {
+        console.log("Transaction submitted:", response.hash);
+        
+        // Wait for transaction confirmation
+        await aptos.waitForTransaction({
+          transactionHash: response.hash,
+        });
+        
+        setSuccess(`Successfully withdrew ${amount} APT! Transaction: ${response.hash}`);
+        console.log("Withdrawal successful:", response);
+        
+        // Clear inputs after successful withdrawal
+        setLeaderAddress("");
+        setAmount("");
+      }
     } catch (err) {
-      setError(err?.message || String(err));
+      console.error("Withdrawal error:", err);
+      
+      let errorMessage = "Failed to withdraw from vault";
+      
+      if (err.message) {
+        if (err.message.includes("insufficient")) {
+          errorMessage = "Insufficient balance for transaction fees or withdrawal amount.";
+        } else if (err.message.includes("MAX_GAS_UNITS_BELOW_MIN_TRANSACTION_GAS_UNITS")) {
+          errorMessage = "Gas configuration error. Please try again.";
+        } else if (err.message.includes("SEQUENCE_NUMBER_TOO_OLD")) {
+          errorMessage = "Transaction sequence error. Please refresh and try again.";
+        } else if (err.message.includes("USER_TRANSACTION_EXPIRED")) {
+          errorMessage = "Transaction expired. Please try again.";
+        } else if (err.message.includes("Generic error")) {
+          errorMessage = "Transaction simulation failed. Please check the vault address and amount.";
+        } else {
+          errorMessage = `Transaction failed: ${err.message}`;
+        }
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }
+  };
+
+  const clearMessages = () => {
+    setError("");
+    setSuccess("");
+  };
 
   return (
-    <div>
-      <input 
-        value={leader}
-        onChange={e => setLeader(e.target.value)}
-        placeholder="Vault Leader Address"
-        style={{ marginRight: "8px" }}
-      />
-      <input 
-        type="number" 
-        value={amount}
-        onChange={e => setAmount(e.target.value)}
-        placeholder="Amount"
-        style={{ marginRight: "8px" }}
-      />
+    <div style={{ marginBottom: "15px" }}>
+      <div style={{ marginBottom: "10px" }}>
+        <input
+          type="text"
+          placeholder="Vault Leader Address (0x...)"
+          value={leaderAddress}
+          onChange={(e) => setLeaderAddress(e.target.value.trim())}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "14px",
+            fontFamily: "monospace",
+            marginBottom: "8px",
+            boxSizing: "border-box"
+          }}
+        />
+        
+        <input
+          type="number"
+          placeholder="Amount (APT)"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          disabled={loading}
+          min="0"
+          step="0.01"
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "14px",
+            boxSizing: "border-box"
+          }}
+        />
+      </div>
+
       <button
         onClick={handleWithdraw}
-        disabled={loading || !leader || !amount}
-        style={{ margin: "8px", padding: "8px 16px" }}
+        disabled={!connected || loading || !leaderAddress || !amount}
+        style={{
+          padding: "12px 20px",
+          backgroundColor: !connected ? "#ccc" : loading ? "#ffa500" : "#dc3545",
+          color: "white",
+          border: "none",
+          borderRadius: "6px",
+          cursor: !connected || loading ? "not-allowed" : "pointer",
+          fontSize: "14px",
+          fontWeight: "500",
+          width: "100%",
+          transition: "background-color 0.3s"
+        }}
       >
-        {loading ? "Withdrawing..." : "Withdraw"}
+        {loading ? "Withdrawing..." : "Withdraw from Vault"}
       </button>
-      {success && <div style={{ color: "green" }}>{success}</div>}
-      {error && <div style={{ color: "red" }}>{error}</div>}
+
+      {error && (
+        <div style={{
+          color: "#dc3545",
+          backgroundColor: "#f8d7da",
+          padding: "8px 12px",
+          marginTop: "8px",
+          borderRadius: "4px",
+          border: "1px solid #f5c6cb",
+          fontSize: "13px"
+        }}>
+          {error}
+          <button 
+            onClick={clearMessages}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#dc3545",
+              cursor: "pointer",
+              fontSize: "16px",
+              float: "right",
+              padding: "0",
+              marginTop: "-2px"
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {success && (
+        <div style={{
+          color: "#155724",
+          backgroundColor: "#d4edda",
+          padding: "8px 12px",
+          marginTop: "8px",
+          borderRadius: "4px",
+          border: "1px solid #c3e6cb",
+          fontSize: "13px",
+          wordBreak: "break-all"
+        }}>
+          {success}
+          <button 
+            onClick={clearMessages}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#155724",
+              cursor: "pointer",
+              fontSize: "16px",
+              float: "right",
+              padding: "0",
+              marginTop: "-2px"
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {!connected && (
+        <p style={{
+          fontSize: "12px",
+          color: "#666",
+          marginTop: "5px",
+          fontStyle: "italic"
+        }}>
+          Connect wallet to withdraw from vault
+        </p>
+      )}
+      
+      {/* Demo mode indicator */}
+      <div style={{
+        fontSize: "11px",
+        color: "#6c757d",
+        marginTop: "5px",
+        textAlign: "center",
+        fontStyle: "italic"
+      }}>
+        🔒 Demo Mode: Safe for testing
+      </div>
     </div>
   );
-}
+};
 
 export default WithdrawButton;
