@@ -54,30 +54,60 @@ const JoinVaultButton = () => {
         leaderAddress : 
         `0x${leaderAddress}`;
 
+      console.log("Joining vault with leader address:", normalizedAddress);
+
       const transaction = {
         data: {
           function: getFunctionName("join_vault"),
           functionArguments: [normalizedAddress],
         },
+        options: {
+          maxGasAmount: 20000,      // Increased gas limit for complex transactions
+          gasUnitPrice: 100,        // Standard gas price for testnet
+          expireTimestamp: Math.floor(Date.now() / 1000) + 30, // 30 seconds timeout
+        },
       };
+
+      console.log("Transaction configuration:", transaction);
 
       const response = await signAndSubmitTransaction(transaction);
       
       if (response) {
+        console.log("Transaction submitted:", response.hash);
+        
         // Wait for transaction confirmation
         await aptos.waitForTransaction({
           transactionHash: response.hash,
         });
         
         setSuccess(`Successfully joined vault ${formatAddress(normalizedAddress)}! Transaction: ${response.hash}`);
-        console.log("Joined vault:", response);
+        console.log("Successfully joined vault:", response);
         
         // Clear the input after successful join
         setLeaderAddress("");
       }
     } catch (err) {
       console.error("Join vault error:", err);
-      setError(parseTransactionError(err));
+      
+      let errorMessage = "Failed to join vault";
+      
+      if (err.message) {
+        if (err.message.includes("insufficient")) {
+          errorMessage = "Insufficient balance for transaction fees. Please ensure you have enough APT for gas.";
+        } else if (err.message.includes("MAX_GAS_UNITS_BELOW_MIN_TRANSACTION_GAS_UNITS")) {
+          errorMessage = "Gas configuration error. Please try again.";
+        } else if (err.message.includes("SEQUENCE_NUMBER_TOO_OLD")) {
+          errorMessage = "Transaction sequence error. Please refresh and try again.";
+        } else if (err.message.includes("USER_TRANSACTION_EXPIRED")) {
+          errorMessage = "Transaction expired. Please try again.";
+        } else if (err.message.includes("Generic error")) {
+          errorMessage = "Transaction simulation failed. Please check the vault address and try again.";
+        } else {
+          errorMessage = parseTransactionError(err) || `Transaction failed: ${err.message}`;
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(LOADING_STATES.IDLE);
     }
@@ -259,6 +289,17 @@ const JoinVaultButton = () => {
           Connect wallet to join a vault
         </p>
       )}
+
+      {/* Demo mode indicator */}
+      <div style={{
+        fontSize: "11px",
+        color: "#6c757d",
+        marginTop: "5px",
+        textAlign: "center",
+        fontStyle: "italic"
+      }}>
+        🔒 Demo Mode: Safe for testing
+      </div>
 
       <div style={{
         fontSize: "11px",
