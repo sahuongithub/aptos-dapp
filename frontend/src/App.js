@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AptosWalletAdapterProvider, useWallet } from "@aptos-labs/wallet-adapter-react";
 import { PetraWallet } from "petra-plugin-wallet-adapter";
-import { MartianWallet } from "@martianwallet/aptos-wallet-adapter";
-import { FewchaWallet } from "fewcha-plugin-wallet-adapter";
-import { PontemWallet } from "@pontem/wallet-adapter-plugin";
 import CreateVaultButton from "./CreateVaultButton";
 import DepositButton from "./DepositButton";
 import WithdrawButton from "./WithdrawButton";
