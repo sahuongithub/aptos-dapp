@@ -27,30 +27,46 @@ const CreateVaultButton = () => {
           function: "0xf02e42e167e86430855e112267405f0bb4bb6a8fed16cd7e4e4a339ec7341f73::VaultFactory::create_vault",
           functionArguments: [],
         },
+        options: {
+          maxGasAmount: 20000,      // Increased gas limit for complex transactions
+          gasUnitPrice: 100,        // Standard gas price for testnet
+          expireTimestamp: Math.floor(Date.now() / 1000) + 30, // 30 seconds timeout
+        },
       };
 
+      console.log("Creating vault with transaction:", transaction);
+      
       const response = await signAndSubmitTransaction(transaction);
       
       if (response) {
+        console.log("Transaction submitted:", response.hash);
+        
         // Wait for transaction confirmation
         await aptos.waitForTransaction({
           transactionHash: response.hash,
         });
         
         setSuccess(`Vault created successfully! Transaction: ${response.hash}`);
-        console.log("Vault created:", response);
+        console.log("Vault created successfully:", response);
       }
     } catch (err) {
       console.error("Create vault error:", err);
       
       let errorMessage = "Failed to create vault";
+      
       if (err.message) {
         if (err.message.includes("1008")) {
           errorMessage = "You already have a vault. Only one vault per address is allowed.";
         } else if (err.message.includes("insufficient")) {
-          errorMessage = "Insufficient balance for transaction fees";
+          errorMessage = "Insufficient balance for transaction fees. Please ensure you have enough APT for gas.";
+        } else if (err.message.includes("MAX_GAS_UNITS_BELOW_MIN_TRANSACTION_GAS_UNITS")) {
+          errorMessage = "Gas configuration error. Please try again.";
+        } else if (err.message.includes("SEQUENCE_NUMBER_TOO_OLD")) {
+          errorMessage = "Transaction sequence error. Please refresh and try again.";
+        } else if (err.message.includes("USER_TRANSACTION_EXPIRED")) {
+          errorMessage = "Transaction expired. Please try again.";
         } else {
-          errorMessage = err.message;
+          errorMessage = `Transaction failed: ${err.message}`;
         }
       }
       
@@ -155,6 +171,17 @@ const CreateVaultButton = () => {
           Connect wallet to create a vault
         </p>
       )}
+      
+      {/* Demo mode indicator */}
+      <div style={{
+        fontSize: "11px",
+        color: "#6c757d",
+        marginTop: "5px",
+        textAlign: "center",
+        fontStyle: "italic"
+      }}>
+        🔒 Demo Mode: Safe for testing
+      </div>
     </div>
   );
 };
