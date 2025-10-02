@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { AptosWalletAdapterProvider, useWallet } from "@aptos-labs/wallet-adapter-react";
 import { PetraWallet } from "petra-plugin-wallet-adapter";
-import { MartianWallet } from "@martianwallet/aptos-wallet-adapter";
-import { FewchaWallet } from "fewcha-plugin-wallet-adapter";
-import { PontemWallet } from "@pontem/wallet-adapter-plugin";
+import { Network } from "@aptos-labs/ts-sdk";
+// Commented out for testing - uncomment when packages are installed
+// import { MartianWallet } from "@martianwallet/aptos-wallet-adapter";
+// import { FewchaWallet } from "fewcha-plugin-wallet-adapter";
+// import { PontemWallet } from "@pontem/wallet-adapter-plugin";
 import CreateVaultButton from "./CreateVaultButton";
 import DepositButton from "./DepositButton";
 import WithdrawButton from "./WithdrawButton";
@@ -17,7 +19,16 @@ import EmergencyPauseButton from "./EmergencyPauseButton";
 import MarketStats from "./MarketStats";
 
 function WalletConnectSection() {
-  const { connected, account, connect, disconnect, connecting, wallet } = useWallet();
+  const { 
+    connect, 
+    disconnect, 
+    account, 
+    connected, 
+    wallet,
+    wallets 
+  } = useWallet();
+  
+  const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [walletName, setWalletName] = useState("");
@@ -25,52 +36,48 @@ function WalletConnectSection() {
   useEffect(() => {
     if (connected && account) {
       setConnectionStatus("connected");
-      setWalletName(wallet?.adapter?.name || "Unknown Wallet");
+      setWalletName(wallet?.name || wallet?.adapter?.name || "Unknown Wallet");
       setError("");
-    } else if (connecting) {
+    } else if (isConnecting) {
       setConnectionStatus("connecting");
     } else {
       setConnectionStatus("disconnected");
       setWalletName("");
     }
-  }, [connected, connecting, account, wallet]);
+  }, [connected, isConnecting, account, wallet]);
 
   const handleConnect = async () => {
     try {
+      setIsConnecting(true);
       setError("");
       setConnectionStatus("connecting");
       
-      // Add timeout to prevent infinite connecting state
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Connection timeout - please try again')), 30000)
-      );
+      console.log("Available wallets:", wallets);
+      console.log("Attempting to connect...");
       
-      await Promise.race([connect(), timeoutPromise]);
-      
-      // Verify connection after connect attempt
-      setTimeout(() => {
-        if (!connected && !connecting) {
-          setError("Connection failed. Please ensure your wallet is installed and unlocked.");
-          setConnectionStatus("disconnected");
-        }
-      }, 3000);
-      
+      // Connect using the working method you found
+      if (wallets && wallets.length > 0) {
+        await connect(wallets[0].name);
+        console.log("Connection successful!");
+      } else {
+        throw new Error("No wallets detected. Please install Petra wallet.");
+      }
     } catch (err) {
-      console.error("Wallet connection error:", err);
+      console.error("Connection error:", err);
       let errorMessage = "Failed to connect wallet. ";
       
-      if (err.message?.includes('timeout')) {
-        errorMessage += "Connection timed out. Please try again.";
-      } else if (err.message?.includes('User rejected')) {
+      if (err.message?.includes('User rejected')) {
         errorMessage += "Connection was rejected. Please approve the connection in your wallet.";
       } else if (err.message?.includes('No wallet')) {
-        errorMessage += "No wallet found. Please install Petra, Martian, or another supported Aptos wallet.";
+        errorMessage += "No wallet found. Please install Petra or another supported Aptos wallet.";
       } else {
         errorMessage += err.message || "Please ensure your wallet is installed and unlocked.";
       }
       
       setError(errorMessage);
       setConnectionStatus("disconnected");
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -144,21 +151,21 @@ function WalletConnectSection() {
           <button
             style={{ 
               padding: "12px 24px",
-              backgroundColor: connecting ? "#ccc" : "#007aff",
+              backgroundColor: isConnecting ? "#ccc" : "#007aff",
               color: "white",
               border: "none",
               borderRadius: "6px",
-              cursor: connecting ? "not-allowed" : "pointer",
+              cursor: isConnecting ? "not-allowed" : "pointer",
               fontSize: "16px",
               marginRight: "10px"
             }}
             onClick={handleConnect}
-            disabled={connecting}
+            disabled={isConnecting}
           >
-            {connecting ? "Connecting..." : "Connect Wallet"}
+            {isConnecting ? "Connecting..." : "Connect Wallet"}
           </button>
           
-          {connecting && (
+          {isConnecting && (
             <button
               style={{
                 padding: "12px 24px",
@@ -170,6 +177,7 @@ function WalletConnectSection() {
                 fontSize: "16px"
               }}
               onClick={() => {
+                setIsConnecting(false);
                 setConnectionStatus("disconnected");
                 setError("");
               }}
@@ -207,7 +215,7 @@ function WalletConnectSection() {
         </div>
       )}
 
-      {!connected && !connecting && (
+      {!connected && !isConnecting && (
         <div style={{ marginTop: "10px", fontSize: "14px", color: "#666" }}>
           <p>Supported wallets: Petra, Martian, Fewcha, Pontem</p>
           <p>
@@ -303,6 +311,21 @@ function App() {
             Create and manage copy trading vaults on Aptos blockchain
           </p>
         </header>
+
+        {/* Demo Mode Indicator */}
+        <div style={{ 
+          backgroundColor: "#d4edda", 
+          border: "1px solid #c3e6cb",
+          padding: "15px", 
+          marginBottom: "20px", 
+          borderRadius: "8px",
+          textAlign: "center"
+        }}>
+          <strong style={{ color: "#155724" }}>🔒 DEMO MODE - Safe Testing Environment</strong>
+          <p style={{ margin: "5px 0 0 0", fontSize: "14px", color: "#155724" }}>
+            All transactions are simulated. No real funds required for testing.
+          </p>
+        </div>
 
         {error && (
           <div style={{ 
