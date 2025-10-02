@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { MerkleTradeSDK } from "@merkletrade/ts-sdk";
 import { parseTransactionError, getFunctionName, validateAmount, LOADING_STATES } from "./utils/errorHandler";
 
 const ExecuteTradeButton = () => {
@@ -12,26 +13,74 @@ const ExecuteTradeButton = () => {
   const [tradeType, setTradeType] = useState("buy");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [tradePayload, setTradePayload] = useState(null);
+  const [isProduction, setIsProduction] = useState(false); // Toggle for production mode
 
   const config = new AptosConfig({ network: Network.TESTNET });
   const aptos = new Aptos(config);
 
-  const generateMerkleTradePayload = (amount, type) => {
-    // Mock Merkle Trade SDK payload generation
-    // In production, this would use the actual Merkle Trade SDK
-    const mockPayload = {
-      market: "APT-USDC",
-      side: type === "buy" ? "BID" : "ASK",
-      amount: parseFloat(amount),
-      price: type === "buy" ? 8.50 : 8.55, // Mock prices
-      type: "LIMIT",
-      timestamp: Date.now(),
-      nonce: Math.floor(Math.random() * 1000000),
-      userAddress: account?.address,
-      signature: "0x" + "a".repeat(128), // Mock signature
-    };
+  // Initialize Merkle SDK (for production use)
+  const merkleSDK = new MerkleTradeSDK({
+    network: "testnet", // Change to "mainnet" for production
+    apiKey: process.env.REACT_APP_MERKLE_API_KEY || "", // Add your API key to .env
+  });
 
-    return mockPayload;
+  const generateMerkleTradePayload = async (amount, type) => {
+    if (isProduction && process.env.REACT_APP_MERKLE_API_KEY) {
+      try {
+        // Production: Use actual Merkle SDK
+        const orderData = {
+          market: "APT-USDC",
+          side: type === "buy" ? "BID" : "ASK",
+          amount: parseFloat(amount),
+          type: "LIMIT",
+          price: type === "buy" ? 8.50 : 8.55, // You should get real market prices
+          userAddress: account?.address,
+        };
+
+        const order = await merkleSDK.createOrder(orderData);
+        return order;
+      } catch (error) {
+        console.error("Merkle SDK error:", error);
+        throw new Error("Failed to create order with Merkle SDK: " + error.message);
+      }
+    } else {
+      // Demo mode: Mock payload generation
+      const mockPayload = {
+        market: "APT-USDC",
+        side: type === "buy" ? "BID" : "ASK",
+        amount: parseFloat(amount),
+        price: type === "buy" ? 8.50 : 8.55,
+        type: "LIMIT",
+        timestamp: Date.now(),
+        nonce: Math.floor(Math.random() * 1000000),
+        userAddress: account?.address,
+        signature: "0x" + "a".repeat(128), // Mock signature
+        mode: "DEMO",
+      };
+
+      return mockPayload;
+    }
+  };
+
+  const submitToMerkleDEX = async (payload) => {
+    if (isProduction && process.env.REACT_APP_MERKLE_API_KEY) {
+      try {
+        // Production: Submit to actual Merkle DEX
+        const result = await merkleSDK.submitOrder(payload);
+        return result;
+      } catch (error) {
+        console.error("Merkle DEX submission error:", error);
+        throw new Error("Failed to submit order to Merkle DEX: " + error.message);
+      }
+    } else {
+      // Demo mode: Simulate submission
+      console.log("Demo mode: Order would be submitted to Merkle DEX:", payload);
+      return {
+        success: true,
+        orderId: "demo_" + Date.now(),
+        message: "Demo order created successfully",
+      };
+    }
   };
 
   const handleExecuteTrade = async () => {
@@ -45,6 +94,12 @@ const ExecuteTradeButton = () => {
       return;
     }
 
+    // Check for API key in production mode
+    if (isProduction && !process.env.REACT_APP_MERKLE_API_KEY) {
+      setError("Merkle API key is required for production mode. Please add REACT_APP_MERKLE_API_KEY to your .env file.");
+      return;
+    }
+
     setLoading(LOADING_STATES.LOADING);
     setError("");
     setSuccess("");
@@ -52,11 +107,16 @@ const ExecuteTradeButton = () => {
 
     try {
       // Step 1: Generate Merkle Trade payload
-      const merklePayload = generateMerkleTradePayload(tradeAmount, tradeType);
+      const merklePayload = await generateMerkleTradePayload(tradeAmount, tradeType);
       setTradePayload(merklePayload);
 
-      // Step 2: Convert trade data to signal for on-chain storage
-      // In production, this would be more sophisticated trade data encoding
+      // Step 2: Submit to Merkle DEX (if in production mode)
+      let merkleResult = null;
+      if (isProduction) {
+        merkleResult = await submitToMerkleDEX(merklePayload);
+      }
+
+      // Step 3: Store trade signal on-chain
       const tradeSignal = Math.floor(parseFloat(tradeAmount) * 100); // Convert to integer for storage
 
       const transaction = {
@@ -74,11 +134,16 @@ const ExecuteTradeButton = () => {
           transactionHash: response.hash,
         });
         
-        setSuccess(`Trade signal published successfully! Transaction: ${response.hash}`);
-        console.log("Trade executed:", { response, merklePayload });
+        const modeText = isProduction ? "Production" : "Demo";
+        const merkleText = merkleResult ? ` | Merkle Order ID: ${merkleResult.orderId}` : "";
+        setSuccess(`${modeText} trade executed successfully! Transaction: ${response.hash}${merkleText}`);
         
-        // In production, here you would submit the Merkle payload to the DEX
-        console.log("Merkle Trade Payload (demo mode):", merklePayload);
+        console.log("Trade executed:", { 
+          response, 
+          merklePayload, 
+          merkleResult,
+          mode: isProduction ? "production" : "demo"
+        });
       }
     } catch (err) {
       console.error("Execute trade error:", err);
@@ -100,6 +165,15 @@ const ExecuteTradeButton = () => {
     if (/^\d*\.?\d*$/.test(value)) {
       setTradeAmount(value);
     }
+  };
+
+  const toggleProductionMode = () => {
+    if (!isProduction && !process.env.REACT_APP_MERKLE_API_KEY) {
+      setError("Cannot enable production mode: REACT_APP_MERKLE_API_KEY is not configured");
+      return;
+    }
+    setIsProduction(!isProduction);
+    clearMessages();
   };
 
   return (
@@ -137,20 +211,32 @@ const ExecuteTradeButton = () => {
           </select>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          style={{
-            fontSize: "12px",
-            color: "#007aff",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            textDecoration: "underline"
-          }}
-        >
-          {showAdvanced ? "Hide" : "Show"} Advanced Info
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px" }}>
+          <label style={{ fontSize: "12px", display: "flex", alignItems: "center", gap: "5px" }}>
+            <input
+              type="checkbox"
+              checked={isProduction}
+              onChange={toggleProductionMode}
+              disabled={loading === LOADING_STATES.LOADING}
+            />
+            Production Mode
+          </label>
+          
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            style={{
+              fontSize: "12px",
+              color: "#007aff",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              textDecoration: "underline"
+            }}
+          >
+            {showAdvanced ? "Hide" : "Show"} Advanced Info
+          </button>
+        </div>
       </div>
 
       <button
@@ -173,7 +259,7 @@ const ExecuteTradeButton = () => {
       >
         {loading === LOADING_STATES.LOADING ? 
           "Executing Trade..." : 
-          `Execute ${tradeType.charAt(0).toUpperCase() + tradeType.slice(1)} Order`
+          `${isProduction ? "[LIVE]" : "[DEMO]"} Execute ${tradeType.charAt(0).toUpperCase() + tradeType.slice(1)} Order`
         }
       </button>
 
@@ -186,9 +272,13 @@ const ExecuteTradeButton = () => {
           fontSize: "12px",
           color: "#666"
         }}>
-          <p><strong>Demo Mode:</strong> This creates a trade signal on-chain and generates a Merkle Trade payload.</p>
+          <p><strong>Mode:</strong> {isProduction ? "Production (Live Trading)" : "Demo (Safe Testing)"}</p>
           <p><strong>Market:</strong> APT-USDC</p>
-          <p><strong>Integration:</strong> Ready for production DEX submission when enabled</p>
+          <p><strong>SDK Status:</strong> {process.env.REACT_APP_MERKLE_API_KEY ? "Configured" : "Not Configured"}</p>
+          <p><strong>Integration:</strong> {isProduction ? "Live DEX Submission Enabled" : "Demo Mode - No Real Trades"}</p>
+          {!process.env.REACT_APP_MERKLE_API_KEY && (
+            <p style={{ color: "#dc3545" }}><strong>Note:</strong> Add REACT_APP_MERKLE_API_KEY to .env for production mode</p>
+          )}
         </div>
       )}
 
@@ -196,13 +286,13 @@ const ExecuteTradeButton = () => {
         <div style={{
           marginTop: "10px",
           padding: "10px",
-          backgroundColor: "#e3f2fd",
+          backgroundColor: isProduction ? "#fff3cd" : "#e3f2fd",
           borderRadius: "4px",
           fontSize: "11px",
-          color: "#1976d2"
+          color: isProduction ? "#856404" : "#1976d2"
         }}>
-          <p><strong>Generated Merkle Trade Payload:</strong></p>
-          <pre style={{ margin: 0, overflow: "auto", maxHeight: "100px" }}>
+          <p><strong>{isProduction ? "Live" : "Demo"} Merkle Trade Payload:</strong></p>
+          <pre style={{ margin: 0, overflow: "auto", maxHeight: "150px" }}>
             {JSON.stringify(tradePayload, null, 2)}
           </pre>
         </div>
